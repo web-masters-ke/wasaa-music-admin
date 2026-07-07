@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --surface: #FFFFFF;
+  --surface-2: #F7F7F5;
+  --surface-3: #EFEFEC;
+  --border: #E7E5E1;
+  --text: #0E0E10;
+  --text-muted: #6B6B72;
+
+  /* Chart palette — 8 distinct colors, WCAG-legible against both surfaces.
+     --chart-1 is brick (brand primary); rest are complementary hues. */
+  --chart-1: #0081FF;
+  --chart-2: #3B82F6;
+  --chart-3: #10B981;
+  --chart-4: #F59E0B;
+  --chart-5: #8B5CF6;
+  --chart-6: #EC4899;
+  --chart-7: #14B8A6;
+  --chart-8: #64748B;
+}
+
+:root.dark {
+  --surface: #0F0F11;
+  --surface-2: #16161A;
+  --surface-3: #1E1E23;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #F5F5F5;
+  --text-muted: #9A9AA3;
+
+  /* Slightly brighter chart hues on dark to keep contrast */
+  --chart-1: #4FA5FF;
+  --chart-2: #60A5FA;
+  --chart-3: #34D399;
+  --chart-4: #FBBF24;
+  --chart-5: #A78BFA;
+  --chart-6: #F472B6;
+  --chart-7: #2DD4BF;
+  --chart-8: #94A3B8;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--surface-2);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Global scrollbar: thin brick in track everywhere except sidebar (which owns its own perpetual scrollbar) */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 129, 255, 0.35);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 129, 255, 0.6); }
+
+/* Sidebar hides native scrollbar entirely — PerpetualScrollbar overlays its own */
+.sidebar-scroll-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sidebar-scroll-hidden::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* Login gradient spin */
+@keyframes brick-spin {
+  0%   { transform: rotate(0deg)   scale(1); }
+  50%  { transform: rotate(180deg) scale(1.05); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.brick-gradient {
+  background: conic-gradient(
+    from 0deg at 30% 40%,
+    #0A0F1E,
+    #1A2340,
+    #0081FF,
+    #7F301A,
+    #0A0F1E
+  );
+  filter: blur(60px);
+  animation: brick-spin 24s ease-in-out infinite;
+}
+
+/* Focus rings */
+:focus-visible {
+  outline: 2px solid #0081FF;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus-visible, a:focus-visible { outline-offset: 3px; }
+
+/* Skeleton loader */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-2) 0%,
+    var(--surface-3) 50%,
+    var(--surface-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+  border-radius: 6px;
+}
