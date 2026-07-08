@@ -3,16 +3,12 @@ on:
   push:
     branches: [staging]
 jobs:
-  full:
-    uses: web-masters-ke/wasaa-ci/.github/workflows/ci-full-gate.yml@main
+  fast:
+    uses: web-masters-ke/wasaa-ci/.github/workflows/ci-fast.yml@main
     with:
       stack: typescript
       db: ""
       has_openapi: false
-      has_frontend_bundle: true
-      has_container: true
-      container_dockerfile: Dockerfile
-      has_iac: false
       node_version: '20'
     secrets:
       SEMGREP_APP_TOKEN: ${{ secrets.WASAA_SEMGREP_APP_TOKEN }}
