@@ -9,6 +9,14 @@ concurrency:
   group: ci-staging-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+  actions: read
+  packages: write
+  id-token: write
+
 jobs:
   # PR: fast wasaa-ci gate (lint, secrets, quick SAST)
   fast-gate:
