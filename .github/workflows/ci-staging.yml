@@ -1,30 +1,61 @@
 name: ci-staging
 on:
+  pull_request:
+    branches: [staging]
   push:
     branches: [staging]
   workflow_dispatch: {}
-env:
-  REGISTRY: ghcr.io
-  IMAGE: ghcr.io/web-masters-ke/wasaa-music-admin
-  # Staging build-time public config (baked into the client bundle)
-  NEXT_PUBLIC_API_URL: /api-proxy/api/v1/music
-  NEXT_PUBLIC_IDENTITY_URL: /api-proxy/api/v1/identity
-  NEXT_PUBLIC_UPSTREAM_ORIGIN: https://dr.wasaachat.com
+concurrency:
+  group: ci-staging-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
+  # PR: fast wasaa-ci gate (lint, secrets, quick SAST)
+  fast-gate:
+    if: github.event_name == 'pull_request'
+    uses: web-masters-ke/wasaa-ci/.github/workflows/ci-fast.yml@main
+    with:
+      stack: typescript
+      db: ""
+      has_openapi: false
+      node_version: '20'
+    secrets:
+      SEMGREP_APP_TOKEN: ${{ secrets.WASAA_SEMGREP_APP_TOKEN }}
+
+  # push to staging: FULL wasaa-ci gate (SAST/SCA/container/secrets/tests) — blocks build if it fails
+  gate:
+    if: github.event_name != 'pull_request'
+    uses: web-masters-ke/wasaa-ci/.github/workflows/ci-full-gate.yml@main
+    with:
+      stack: typescript
+      db: ""
+      has_openapi: false
+      has_frontend_bundle: true
+      has_container: true
+      container_dockerfile: Dockerfile
+      has_iac: false
+      node_version: '20'
+    secrets:
+      SEMGREP_APP_TOKEN: ${{ secrets.WASAA_SEMGREP_APP_TOKEN }}
+
   build-push:
+    if: github.event_name != 'pull_request'
+    needs: gate
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    permissions: { contents: read, packages: write }
+    outputs:
+      tag: ${{ steps.t.outputs.tag }}
+    env:
+      IMAGE: ghcr.io/web-masters-ke/wasaa-music-admin
+      NEXT_PUBLIC_API_URL: /api-proxy/api/v1/music
+      NEXT_PUBLIC_IDENTITY_URL: /api-proxy/api/v1/identity
+      NEXT_PUBLIC_UPSTREAM_ORIGIN: https://dr.wasaachat.com
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - id: tag
+        with: { registry: ghcr.io, username: ${{ github.actor }}, password: ${{ secrets.GITHUB_TOKEN }} }
+      - id: t
         run: echo "tag=staging-$(date -u +%Y%m%d%H%M)-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v6
         with:
@@ -32,10 +63,40 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
+            ${{ env.IMAGE }}:${{ steps.t.outputs.tag }}
             ${{ env.IMAGE }}:latest-staging
           build-args: |
             NEXT_PUBLIC_API_URL=${{ env.NEXT_PUBLIC_API_URL }}
             NEXT_PUBLIC_IDENTITY_URL=${{ env.NEXT_PUBLIC_IDENTITY_URL }}
             NEXT_PUBLIC_UPSTREAM_ORIGIN=${{ env.NEXT_PUBLIC_UPSTREAM_ORIGIN }}
-      - run: echo "Pushed ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }} and :latest-staging"
+
+  # GitOps: bump the unique image tag in helm-charts-on-prem so ArgoCD detects + rolls out
+  update-helm:
+    if: github.event_name != 'pull_request'
+    needs: build-push
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: web-masters-ke/helm-charts-on-prem
+          ref: main
+          token: ${{ secrets.HELM_CHARTS_PAT }}
+      - name: Bump image tag in values-staging.yaml
+        env:
+          NEW_TAG: ${{ needs.build-push.outputs.tag }}
+        run: |
+          python3 - <<PY
+          import re,io
+          f="charts/wasaa-music-admin/values-staging.yaml"
+          import yaml
+          d=yaml.safe_load(open(f)) or {}
+          d.setdefault('image',{})['repository']='ghcr.io/web-masters-ke/wasaa-music-admin'
+          d['image']['tag']="${NEW_TAG}"
+          d['image']['pullPolicy']='IfNotPresent'
+          yaml.safe_dump(d,open(f,'w'),default_flow_style=False,sort_keys=False)
+          print("set image.tag=${NEW_TAG}")
+          PY
+          git config user.email ci@wasaachat.com; git config user.name "wasaa-ci"
+          git add charts/wasaa-music-admin/values-staging.yaml
+          git commit -m "ci(staging): wasaa-music-admin -> ${NEW_TAG}" || exit 0
+          git push origin main
